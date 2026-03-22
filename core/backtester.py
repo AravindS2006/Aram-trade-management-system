@@ -22,6 +22,19 @@ class IntradayBacktester:
         commission: float = 20.0,
     ):
         self.data = data_with_signals.copy()
+        # Keep backtester compatible with both legacy (Open/High/Low/Close)
+        # and normalized (open/high/low/close) strategy outputs.
+        alias_map = {
+            "open": "Open",
+            "high": "High",
+            "low": "Low",
+            "close": "Close",
+            "volume": "Volume",
+        }
+        for src, dst in alias_map.items():
+            if src in self.data.columns and dst not in self.data.columns:
+                self.data[dst] = self.data[src]
+
         self.portfolio = Portfolio(initial_capital=initial_capital)
         self.risk_per_trade_pct = risk_per_trade_pct
         self.fixed_quantity = quantity  # Simple position sizing for now
@@ -47,6 +60,11 @@ class IntradayBacktester:
         # Shift signal by 1 so execution happens on the bar AFTER the signal is generated. (Avoids lookahead bias)
         # Assuming signal 1=Buy, -1=Sell, 0=None
         self.data["exec_signal"] = self.data["signal"].shift(1).fillna(0)
+        
+        if "sl_price" in self.data.columns:
+            self.data["exec_sl_price"] = self.data["sl_price"].shift(1)
+        if "tp_price" in self.data.columns:
+            self.data["exec_tp_price"] = self.data["tp_price"].shift(1)
 
         for row in self.data.itertuples():
             dt = row.Index
@@ -56,10 +74,14 @@ class IntradayBacktester:
             current_time = dt.time()
             o, h, low, c = row.Open, row.High, row.Low, row.Close
             exec_signal = row.exec_signal
-            
+
             # Read dynamic sl_price and tp_price from dataframe if available
-            dyn_sl = float(row.sl_price) if hasattr(row, "sl_price") and pd.notna(row.sl_price) else None
-            dyn_tp = float(row.tp_price) if hasattr(row, "tp_price") and pd.notna(row.tp_price) else None
+            dyn_sl = (
+                float(row.exec_sl_price) if hasattr(row, "exec_sl_price") and pd.notna(row.exec_sl_price) else None
+            )
+            dyn_tp = (
+                float(row.exec_tp_price) if hasattr(row, "exec_tp_price") and pd.notna(row.exec_tp_price) else None
+            )
 
             # 1. Check for Forced Intraday Square-Off
             if position != 0 and current_time >= self.square_off_time:
@@ -183,6 +205,38 @@ class IntradayBacktester:
                     max_favorable_price = entry_price
                     tsl_active = False
 
+                    # Intra-bar check
+                    if low <= current_sl:
+                        exit_price = round(current_sl * (1 - self.slippage), 3)
+                        self.portfolio.update_position(
+                            symbol,
+                            -current_qty,
+                            exit_price,
+                            dt,
+                            transaction_cost=self.commission,
+                            tag="SL_HIT",
+                        )
+                        position = 0
+                        current_qty = 0
+                    elif h >= current_tp:
+                        exit_price = round(current_tp * (1 - self.slippage), 3)
+                        self.portfolio.update_position(
+                            symbol,
+                            -current_qty,
+                            exit_price,
+                            dt,
+                            transaction_cost=self.commission,
+                            tag="TP_HIT",
+                        )
+                        position = 0
+                        current_qty = 0
+                    else:
+                        if h > max_favorable_price:
+                            max_favorable_price = h
+                            if max_favorable_price >= entry_price * (1 + self.sl_pct):
+                                tsl_active = True
+                                current_sl = max_favorable_price * (1 - self.tsl_pct)
+
                 elif exec_signal == -1:  # Sell
                     entry_price = round(o * (1 - self.slippage), 3)
 
@@ -212,5 +266,37 @@ class IntradayBacktester:
                     current_tp = dyn_tp if dyn_tp is not None else entry_price * (1 - self.tp_pct)
                     max_favorable_price = entry_price
                     tsl_active = False
+
+                    # Intra-bar check
+                    if h >= current_sl:
+                        exit_price = round(current_sl * (1 + self.slippage), 3)
+                        self.portfolio.update_position(
+                            symbol,
+                            current_qty,
+                            exit_price,
+                            dt,
+                            transaction_cost=self.commission,
+                            tag="SL_HIT",
+                        )
+                        position = 0
+                        current_qty = 0
+                    elif low <= current_tp:
+                        exit_price = round(current_tp * (1 + self.slippage), 3)
+                        self.portfolio.update_position(
+                            symbol,
+                            current_qty,
+                            exit_price,
+                            dt,
+                            transaction_cost=self.commission,
+                            tag="TP_HIT",
+                        )
+                        position = 0
+                        current_qty = 0
+                    else:
+                        if low < max_favorable_price:
+                            max_favorable_price = low
+                            if max_favorable_price <= entry_price * (1 - self.sl_pct):
+                                tsl_active = True
+                                current_sl = max_favorable_price * (1 + self.tsl_pct)
 
         return self.portfolio.generate_tearsheet()

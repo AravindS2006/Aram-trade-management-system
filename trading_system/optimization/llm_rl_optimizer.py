@@ -8,7 +8,7 @@ from datetime import datetime
 from itertools import product
 from math import log, sqrt
 from typing import Any
-from urllib import error, request
+from urllib import error, parse, request
 
 
 @dataclass
@@ -29,6 +29,7 @@ class LLMAssistedRLOptimizer:
         epsilon: float = 0.15,
         ucb_c: float = 1.2,
         random_seed: int = 7,
+        llm_provider: str = "openai_compatible",
         llm_endpoint: str | None = None,
         llm_api_key: str | None = None,
         llm_model: str | None = None,
@@ -48,6 +49,7 @@ class LLMAssistedRLOptimizer:
         self.action_counts = [0 for _ in self.action_grid]
         self.total_steps = 0
 
+        self.llm_provider = llm_provider.strip().lower()
         self.llm_endpoint = llm_endpoint
         self.llm_api_key = llm_api_key
         self.llm_model = llm_model
@@ -125,7 +127,7 @@ class LLMAssistedRLOptimizer:
         return self.random.choice(best_indices)
 
     def _llm_prior_pick(self, trials: list[dict[str, Any]], candidates: list[int]) -> int | None:
-        if not self.llm_endpoint or not self.llm_model:
+        if not self.llm_model:
             return None
 
         top_trials = sorted(trials, key=lambda t: t["score"], reverse=True)[:5]
@@ -141,13 +143,31 @@ class LLMAssistedRLOptimizer:
 
         prompt = {
             "instruction": (
-                "Pick exactly one action_index likely to improve reward. "
-                "Favor strong risk-adjusted return and lower drawdown."
+                "Analyze the top_trials to identify which parameter combinations yield the best risk-adjusted returns. "
+                "Then, evaluate the candidates and pick exactly one action_index that is most likely to improve the reward. "
+                "Provide a short reasoning for your choice."
             ),
             "top_trials": top_trials,
             "candidates": candidate_payload,
-            "response_schema": {"action_index": "int"},
+            "response_schema": {"reasoning": "string", "action_index": "int"},
         }
+
+        try:
+            if self.llm_provider == "gemini":
+                payload = self._request_gemini(prompt)
+            else:
+                payload = self._request_openai_compatible(prompt)
+
+            action_index = self._extract_action_index(payload)
+            if action_index in candidates:
+                return int(action_index)
+            return None
+        except (error.URLError, error.HTTPError, TimeoutError, json.JSONDecodeError, ValueError):
+            return None
+
+    def _request_openai_compatible(self, prompt: dict[str, Any]) -> dict[str, Any]:
+        if not self.llm_endpoint:
+            raise ValueError("llm_endpoint is required for openai_compatible provider")
 
         headers = {"Content-Type": "application/json"}
         if self.llm_api_key:
@@ -156,15 +176,47 @@ class LLMAssistedRLOptimizer:
         body = json.dumps({"model": self.llm_model, "input": prompt}).encode("utf-8")
         req = request.Request(self.llm_endpoint, data=body, headers=headers, method="POST")
 
-        try:
-            with request.urlopen(req, timeout=12) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-            action_index = self._extract_action_index(payload)
-            if action_index in candidates:
-                return int(action_index)
-            return None
-        except (error.URLError, error.HTTPError, TimeoutError, json.JSONDecodeError, ValueError):
-            return None
+        with request.urlopen(req, timeout=12) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    def _request_gemini(self, prompt: dict[str, Any]) -> dict[str, Any]:
+        if not self.llm_api_key:
+            raise ValueError("llm_api_key is required for gemini provider")
+
+        base_endpoint = self.llm_endpoint or (
+            f"https://generativelanguage.googleapis.com/v1beta/models/{self.llm_model}:generateContent"
+        )
+        query = parse.urlencode({"key": self.llm_api_key})
+        endpoint = f"{base_endpoint}?{query}"
+
+        prompt_text = json.dumps(prompt, ensure_ascii=True)
+        body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": (
+                                "Select one action_index from candidate actions. Return ONLY JSON with shape "
+                                '{"reasoning": "<str>", "action_index": <int>}.\\n' + prompt_text
+                            )
+                        }
+                    ],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.1,
+            },
+        }
+
+        req = request.Request(
+            endpoint,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(req, timeout=12) as resp:
+            return json.loads(resp.read().decode("utf-8"))
 
     @staticmethod
     def _extract_action_index(payload: dict[str, Any]) -> int | None:
@@ -178,9 +230,35 @@ class LLMAssistedRLOptimizer:
             if isinstance(first, dict):
                 content = first.get("message", {}).get("content")
                 if isinstance(content, str):
-                    parsed = json.loads(content)
+                    parsed = LLMAssistedRLOptimizer._parse_json_content(content)
                     return int(parsed["action_index"])
+        candidates = payload.get("candidates")
+        if isinstance(candidates, list) and candidates:
+            first = candidates[0]
+            if isinstance(first, dict):
+                content = first.get("content", {})
+                if isinstance(content, dict):
+                    parts = content.get("parts")
+                    if isinstance(parts, list) and parts:
+                        first_part = parts[0]
+                        if isinstance(first_part, dict):
+                            text = first_part.get("text")
+                            if isinstance(text, str):
+                                parsed = LLMAssistedRLOptimizer._parse_json_content(text)
+                                return int(parsed["action_index"])
         return None
+
+    @staticmethod
+    def _parse_json_content(content: str) -> dict[str, Any]:
+        cleaned = content.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            cleaned = cleaned.replace("json", "", 1).strip()
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            cleaned = cleaned[start : end + 1]
+        return json.loads(cleaned)
 
     @staticmethod
     def _build_action_grid(parameter_space: dict[str, list[Any]]) -> list[dict[str, Any]]:

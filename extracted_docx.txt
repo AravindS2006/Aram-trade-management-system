@@ -1,0 +1,596 @@
+WEAPON CANDLE QUANT SYSTEM
+Complete Copilot System Instruction
+EMA Stack  +  MACD Momentum  +  RSI Zone  +  VWAP Anchor  +  Bollinger Bands  +  ATR
+Feed this entire document to GitHub Copilot Chat, Cursor, or any AI coding assistant as the system context before building any module. Build strictly in the order defined in Section 3.
+Section 1 — System Context & Hard Constraints
+This section defines the non-negotiable rules that apply to every single file in the project. Copilot must follow all of these without exception.
+1.1  Language & Dependencies
+Language: Python 3.10+ with full type hints on all function signatures
+Core deps: pandas>=2.0, numpy>=1.24, pytz>=2023.3, loguru>=0.7
+No external indicator libraries (pandas-ta, ta-lib, etc.) — all indicators built from scratch using pandas/numpy
+Testing: pytest>=7.4 with pytest.approx() for all float comparisons
+1.2  Code Quality Rules (non-negotiable)
+No hardcoded values anywhere: all parameters, thresholds, periods, and constants live in config.py only
+No look-ahead bias: never access future bar data in any signal or indicator calculation
+Timezone discipline: ALL timestamps must be Asia/Kolkata (IST = UTC+5:30) immediately on load
+Entry timing: always use NEXT bar's open as entry price — never the signal bar's close
+VWAP reset: cumulative sum resets at 09:15 IST every trading day — never carried forward
+Hard exit: ALL positions force-closed at 15:15 IST via independent scheduled job
+Type hints: every function must have full type annotations
+Docstrings: every function needs minimum one-line docstring
+Fail loudly: use assertions and ValueError — never swallow exceptions silently
+1.3  Project Directory Structure
+weapon_candle/
+  config.py                   # ALL parameters — edit here only
+  main.py                     # live trading orchestrator
+  data/
+    loader.py                 # CSV ingestion + 1-min → 5-min resample
+    preprocessor.py           # VWAP, session_date, prev_close
+  indicators/
+    ema.py                    # EMA 9 / 21 / 50 + cross signals
+    macd.py                   # MACD line, signal, histogram
+    rsi.py                    # RSI Wilder (period=14)
+    vwap.py                   # session-reset VWAP + bands
+    atr.py                    # ATR Wilder + volatility regime
+    bollinger.py              # BB(20,2) + squeeze filter
+    volume.py                 # RVOL (relative volume)
+  signals/
+    scorer.py                 # 4-layer confluence scoring engine
+    filters.py                # session gate, daily cap, squeeze check
+  execution/
+    risk.py                   # position size, SL, T1, T2 calculation
+    order.py                  # Order dataclass + place/update/close
+    manager.py                # position management (trail, T1 hit, BE)
+  backtest/
+    engine.py                 # bar-by-bar simulation
+    metrics.py                # all performance metrics + report
+  utils/
+    time_filter.py            # session gate + hard exit check
+    logger.py                 # structured logging via loguru
+  tests/
+    test_indicators.py
+    test_signals.py
+    test_risk.py
+    test_loader.py
+Section 2 — config.py (Build This First)
+All strategy parameters live here. No other file may define a numeric constant. Every other module imports from config.py.
+2.1  EMA Parameters
+2.2  MACD Parameters
+2.3  RSI Parameters
+2.4  Bollinger Bands Parameters
+2.5  ATR Parameters
+2.6  Session Time Rules
+2.7  Risk Parameters
+Section 3 — Build Order (Follow Exactly)
+Build every module in this sequence. Each module depends on those above it. Never skip ahead — dependency errors will cascade.
+Section 4 — Data Layer
+4.1  data/loader.py
+Handles your exact CSV format: DD/MM/YYYY HH:MM with tab-separated columns (date, open, high, low, close, volume). Resamples 1-min to 5-min.
+Function: load_and_prepare(path: str) -> tuple[pd.DataFrame, pd.DataFrame]
+def load_and_prepare(path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load NSE CSV (DD/MM/YYYY HH:MM). Returns (df_1m, df_5m)."""
+    df = pd.read_csv(
+        path,
+        sep='\t',                         # TAB separated
+        names=['date','open','high','low','close','volume'],
+        header=0,
+        dtype={'open':float,'high':float,'low':float,
+               'close':float,'volume':int}
+    )
+    # Fix 1: explicit format — avoids DD/MM vs MM/DD ambiguity
+    df['date'] = pd.to_datetime(df['date'], format='%d/%m/%Y %H:%M')
+    df = df.set_index('date')
+    df.index = pd.DatetimeIndex(df.index)
+    df_1m = df.copy()                     # keep 1-min for EMA micro-entry
+    # Fix 2: resample to 5-min — closed='left', label='left' is MANDATORY
+    df_5m = df.resample('5min', closed='left', label='left').agg({
+        'open':'first', 'high':'max',
+        'low':'min',   'close':'last', 'volume':'sum'
+    }).dropna()
+    for frame in [df_1m, df_5m]:
+        frame['session_date'] = frame.index.date
+        frame['prev_close']   = frame['close'].shift(1)
+    # Sanity checks — raise, never swallow
+    assert (df_5m['high'] >= df_5m['low']).all(), 'Bad data: high < low'
+    assert (df_5m['volume'] > 0).mean() > 0.95,   'Too many zero-volume bars'
+    return df_1m, df_5m
+CRITICAL: Use sep='\t' if your CSV is tab-separated. Use sep=',' if comma-separated. Check your file in a text editor before running. Wrong separator causes all columns to land in one column silently.
+4.2  data/preprocessor.py
+Validates the loaded DataFrame and adds two derived fields used by every indicator.
+def preprocess(df: pd.DataFrame) -> pd.DataFrame:
+    """Add session_date and prev_close. Validate OHLCV integrity."""
+    required = ['open','high','low','close','volume']
+    missing  = [c for c in required if c not in df.columns]
+    if missing: raise ValueError(f'Missing columns: {missing}')
+    df = df.copy()
+    df['session_date'] = df.index.date
+    df['prev_close']   = df['close'].shift(1)
+    bad_hl = (df['high'] < df['low']).sum()
+    if bad_hl > 0:
+        raise ValueError(f'{bad_hl} bars have high < low — fix data')
+    return df
+Section 5 — Indicator Modules (Exact Formulas)
+Every indicator is calculated from scratch using pandas/numpy. No external libraries. All functions accept and return a DataFrame with new columns added.
+5.1  indicators/ema.py
+def calculate_ema(df: pd.DataFrame) -> pd.DataFrame:
+    """Triple EMA stack (9/21/50) + cross detection."""
+    c = df['close']
+    df['ema9']  = c.ewm(span=EMA_FAST,  adjust=False).mean()
+    df['ema21'] = c.ewm(span=EMA_MID,   adjust=False).mean()
+    df['ema50'] = c.ewm(span=EMA_SLOW,  adjust=False).mean()
+    # Full stack alignment
+    df['ema_bull'] = ((df['ema9']>df['ema21']) & (df['ema21']>df['ema50'])).astype(int)
+    df['ema_bear'] = ((df['ema9']<df['ema21']) & (df['ema21']<df['ema50'])).astype(int)
+    # Fresh cross on this specific bar (shift(1) = previous bar)
+    df['ema9_cross_bull'] = ((df['ema9']>df['ema21']) &
+                             (df['ema9'].shift(1)<=df['ema21'].shift(1))).astype(int)
+    df['ema9_cross_bear'] = ((df['ema9']<df['ema21']) &
+                             (df['ema9'].shift(1)>=df['ema21'].shift(1))).astype(int)
+    return df
+5.2  indicators/macd.py
+def calculate_macd(df: pd.DataFrame) -> pd.DataFrame:
+    """MACD(12,26,9) line, signal, histogram + cross signals."""
+    c = df['close']
+    ema12 = c.ewm(span=MACD_FAST,   adjust=False).mean()
+    ema26 = c.ewm(span=MACD_SLOW,   adjust=False).mean()
+    df['macd_line']   = ema12 - ema26
+    df['macd_signal'] = df['macd_line'].ewm(span=MACD_SIGNAL, adjust=False).mean()
+    df['macd_hist']   = df['macd_line'] - df['macd_signal']
+    # Cross: line crosses signal on THIS bar
+    df['macd_cross_bull'] = ((df['macd_line'] >  df['macd_signal']) &
+                              (df['macd_line'].shift(1) <= df['macd_signal'].shift(1))).astype(int)
+    df['macd_cross_bear'] = ((df['macd_line'] <  df['macd_signal']) &
+                              (df['macd_line'].shift(1) >= df['macd_signal'].shift(1))).astype(int)
+    # Histogram expanding (momentum building)
+    df['hist_exp_bull'] = ((df['macd_hist']>0) & (df['macd_hist']>df['macd_hist'].shift(1))).astype(int)
+    df['hist_exp_bear'] = ((df['macd_hist']<0) & (df['macd_hist']<df['macd_hist'].shift(1))).astype(int)
+    # Zero-line position (macro direction)
+    df['macd_above_zero'] = (df['macd_line'] > 0).astype(int)
+    return df
+5.3  indicators/rsi.py
+def calculate_rsi(df: pd.DataFrame) -> pd.DataFrame:
+    """Wilder RSI(14). Uses ewm(alpha=1/period) — NOT simple rolling average."""
+    delta    = df['close'].diff()
+    gain     = delta.clip(lower=0).ewm(alpha=1/RSI_PERIOD, adjust=False).mean()
+    loss     = (-delta).clip(lower=0).ewm(alpha=1/RSI_PERIOD, adjust=False).mean()
+    df['rsi'] = 100 - 100 / (1 + gain / loss.replace(0, np.nan))
+    df['rsi_rising'] = (df['rsi'] > df['rsi'].shift(2)).astype(int)
+    return df
+Never use rolling(14).mean() for RSI — it gives the wrong values. Wilder smoothing MUST use ewm(alpha=1/14, adjust=False). This is the most common RSI implementation mistake.
+5.4  indicators/vwap.py
+def calculate_vwap(df: pd.DataFrame) -> pd.DataFrame:
+    """Session-reset VWAP + 1-std bands. Resets at 09:15 every day."""
+    df['tp']   = (df['high'] + df['low'] + df['close']) / 3
+    df['vwap'] = np.nan
+    df['vwap_std'] = np.nan
+    for _, group in df.groupby('session_date'):
+        cum_tpv  = (group['tp'] * group['volume']).cumsum()
+        cum_vol  = group['volume'].cumsum()
+        vwap_s   = cum_tpv / cum_vol
+        std_s    = group['tp'].expanding().std().fillna(0)
+        df.loc[group.index, 'vwap']     = vwap_s
+        df.loc[group.index, 'vwap_std'] = std_s
+    df['vwap_upper'] = df['vwap'] + df['vwap_std']
+    df['vwap_lower'] = df['vwap'] - df['vwap_std']
+    df['above_vwap'] = (df['close'] > df['vwap']).astype(int)
+    return df
+VWAP MUST reset every day using groupby('session_date'). Never use a single cumsum() across the whole DataFrame — that gives a multi-day VWAP which destroys intraday signal quality.
+5.5  indicators/atr.py
+def calculate_atr(df: pd.DataFrame) -> pd.DataFrame:
+    """Wilder ATR(14). True Range uses prev_close — ensure preprocessor ran first."""
+    tr = pd.concat([
+        df['high'] - df['low'],
+        (df['high'] - df['prev_close']).abs(),
+        (df['low']  - df['prev_close']).abs(),
+    ], axis=1).max(axis=1)
+    df['atr']     = tr.ewm(alpha=1/ATR_PERIOD, adjust=False).mean()
+    df['atr_avg'] = df['atr'].rolling(20 * 75).mean()  # 20-day avg (75 bars/day)
+    df['trending']= (df['atr'] > df['atr_avg']).astype(int)
+    return df
+5.6  indicators/bollinger.py
+def calculate_bollinger(df: pd.DataFrame) -> pd.DataFrame:
+    """BB(20, 2.0) + squeeze filter. Squeeze = low volatility = skip trade."""
+    c = df['close']
+    sma20      = c.rolling(BB_PERIOD).mean()
+    std20      = c.rolling(BB_PERIOD).std()
+    df['bb_upper']   = sma20 + BB_STD * std20
+    df['bb_lower']   = sma20 - BB_STD * std20
+    df['bb_mid']     = sma20
+    df['bb_width']   = (df['bb_upper'] - df['bb_lower']) / c
+    # Squeeze = band width as % of price < threshold
+    df['bb_squeeze'] = (df['bb_width'] < BB_SQUEEZE_RATIO).astype(int)
+    return df
+5.7  indicators/volume.py
+def calculate_volume(df: pd.DataFrame) -> pd.DataFrame:
+    """Relative Volume (RVOL) = current volume / 20-bar average."""
+    df['vol_ma20'] = df['volume'].rolling(20).mean()
+    df['rvol']     = df['volume'] / df['vol_ma20'].replace(0, np.nan)
+    return df
+Section 6 — Signal Scoring Engine
+The scorer is the core intellectual property of this system. It evaluates 4 layers in sequence. Any mandatory layer failure returns -1 immediately (short-circuit). Score 0–10. Only scores >= 4 result in a trade.
+6.1  Scoring Logic — Long Direction
+6.2  Scoring Logic — Short Direction
+Exact mirror of long direction with all conditions inverted:
+6.3  Score → Trade Decision
+def score_signal(row: pd.Series, direction: str) -> int:
+    """Returns score 0–10 or -1 for hard fail. Called on every bar."""
+    s = 0
+    if direction == 'long':
+        if row['ema_bull']    != 1:   return -1   # hard fail
+        s += 2
+        if row['macd_hist']   <= 0:   return -1   # hard fail
+        s += 2
+        if row['macd_cross_bull'] == 1:  s += 1   # fresh cross bonus
+        if row['macd_above_zero'] == 1:  s += 1   # macro bull bonus
+        if not (RSI_LONG_LO <= row['rsi'] <= RSI_LONG_HI): return -1
+        s += 2
+        if row['rsi_rising']  == 1:   s += 1
+        if row['above_vwap']  != 1:   return -1   # hard fail
+        s += 2
+        if row['close'] > row['vwap_upper']: s += 1
+    else:  # short — exact mirror
+        if row['ema_bear']    != 1:   return -1
+        s += 2
+        if row['macd_hist']   >= 0:   return -1
+        s += 2
+        if row['macd_cross_bear'] == 1:  s += 1
+        if row['macd_above_zero'] == 0:  s += 1
+        if not (RSI_SHORT_LO <= row['rsi'] <= RSI_SHORT_HI): return -1
+        s += 2
+        if row['rsi_rising']  == 0:   s += 1
+        if row['above_vwap']  != 0:   return -1
+        s += 2
+        if row['close'] < row['vwap_lower']: s += 1
+    # Universal blocks + bonuses
+    if row['bb_squeeze']  == 1:   return -1   # squeeze = no trade
+    if row['rvol']         >= 1.5: s += 1
+    if row['trending']     == 1:   s += 1
+    return min(s, 10)
+Section 7 — Execution Layer
+7.1  execution/risk.py
+Three functions — all values derived from config.py constants only.
+def calculate_stop(entry: float, atr: float, direction: str) -> float:
+    """ATR-based stop. Min 0.2% of entry."""
+    sl_dist = max(ATR_SL_MULT * atr, entry * 0.002)
+    return entry - sl_dist if direction == 'long' else entry + sl_dist
+def calculate_targets(entry: float, stop: float,
+                       direction: str) -> tuple[float, float]:
+    """Returns (target1, target2) using RR1 and RR2 multiples."""
+    risk = abs(entry - stop)
+    if direction == 'long':
+        return entry + risk * RR1, entry + risk * RR2
+    return entry - risk * RR1, entry - risk * RR2
+def calculate_qty(capital: float, entry: float, stop: float,
+                  size_mult: float = 1.0) -> int:
+    """Position size = risk_amount / sl_distance. Capped at 15% of capital."""
+    sl_distance = abs(entry - stop)
+    if sl_distance <= 0: return 0
+    risk_amount = capital * RISK_PCT * size_mult
+    raw_qty     = int(risk_amount / sl_distance)
+    max_qty     = int(capital * 0.15 / entry)
+    return max(1, min(raw_qty, max_qty))
+7.2  execution/order.py
+from dataclasses import dataclass, field
+from datetime import datetime
+@dataclass
+class Order:
+    symbol:      str
+    direction:   str         # 'long' or 'short'
+    qty:         int
+    entry_price: float
+    stop_price:  float
+    target1:     float
+    target2:     float
+    entry_ts:    datetime
+    score:       int
+    status:      str  = 'open'    # 'open' | 'closed'
+    exit_price:  float = 0.0
+    exit_ts:     datetime = None
+    exit_reason: str   = ''
+    pnl:         float = 0.0
+    half_closed: bool  = False    # True after T1 hit
+    breakeven:   bool  = False    # True after stop moved to entry
+    def close(self, price: float, ts: datetime, reason: str) -> None:
+        """Mark order closed. Calculate PnL."""
+        self.exit_price  = price
+        self.exit_ts     = ts
+        self.exit_reason = reason
+        self.status      = 'closed'
+        mult = 1 if self.direction == 'long' else -1
+        self.pnl = (price - self.entry_price) * self.qty * mult
+7.3  execution/manager.py — Position Management Loop
+Called on every 5-min bar close for each open position. Handles all exit logic in priority order.
+def manage_position(order: Order, row: pd.Series,
+                    ts, commission: float) -> Order:
+    """Manage open position on each bar. Returns updated Order."""
+    h, l, c = row['high'], row['low'], row['close']
+    # 0. Hard time exit — highest priority
+    if ts.hour * 60 + ts.minute >= HARD_EXIT.hour*60+HARD_EXIT.minute:
+        order.close(c, ts, 'hard_exit')
+        order.pnl -= commission; return order
+    if order.direction == 'long':
+        # 1. Stop-loss check
+        if l <= order.stop_price:
+            order.close(order.stop_price, ts, 'stop_loss')
+            order.pnl -= commission; return order
+        # 2. Target 1 hit — close 50%, move SL to breakeven
+        if not order.half_closed and h >= order.target1:
+            order.half_closed = True
+            order.stop_price  = order.entry_price  # breakeven
+            order.qty         = order.qty // 2
+        # 3. Target 2 hit — close remaining
+        if h >= order.target2:
+            order.close(order.target2, ts, 'target2')
+            order.pnl -= commission; return order
+        # 4. EMA9 trail (only after T1 hit)
+        if order.half_closed and not pd.isna(row['ema9']):
+            if c < row['ema9']:
+                order.close(c, ts, 'ema_trail')
+                order.pnl -= commission; return order
+    else:  # short — exact mirror logic
+        if h >= order.stop_price:
+            order.close(order.stop_price, ts, 'stop_loss')
+            order.pnl -= commission; return order
+        if not order.half_closed and l <= order.target1:
+            order.half_closed = True
+            order.stop_price  = order.entry_price
+            order.qty         = order.qty // 2
+        if l <= order.target2:
+            order.close(order.target2, ts, 'target2')
+            order.pnl -= commission; return order
+        if order.half_closed and not pd.isna(row['ema9']):
+            if c > row['ema9']:
+                order.close(c, ts, 'ema_trail')
+                order.pnl -= commission; return order
+    return order
+Section 8 — main.py (Live Trading Orchestrator)
+The on_bar_close() function is the entry point called on every 5-min bar close. It wires all modules in the correct sequence.
+def on_bar_close(
+    df_5m:   pd.DataFrame,
+    df_1m:   pd.DataFrame,
+    state:   dict
+) -> dict:
+    """Called on every 5-min bar close. state = {positions, daily_trades,
+       capital, date}. Returns updated state."""
+    ts  = df_5m.index[-1]
+    hm  = ts.hour * 60 + ts.minute
+    # ── Step 1: Hard exit check ──────────────────────────────────
+    if hm >= HARD_EXIT.hour*60+HARD_EXIT.minute:
+        state = force_close_all(state, df_5m.iloc[-1], ts)
+        return state
+    # ── Step 2: Manage existing open positions ────────────────────
+    state = manage_all_positions(state, df_5m.iloc[-1], ts)
+    # ── Step 3: Session gate + daily cap ─────────────────────────
+    in_session = ((9*60+30 <= hm <= 11*60+30) or
+                  (13*60+0 <= hm <= 14*60+0))
+    if not in_session: return state
+    if state['daily_trades'] >= MAX_DAILY_TRADES: return state
+    # ── Step 4: Calculate all indicators on current df_5m ────────
+    df = calculate_ema(df_5m)
+    df = calculate_macd(df)
+    df = calculate_rsi(df)
+    df = calculate_vwap(df)
+    df = calculate_atr(df)
+    df = calculate_bollinger(df)
+    df = calculate_volume(df)
+    row = df.iloc[-1]
+    # ── Step 5: Check for NaN in required columns ─────────────────
+    required = ['ema9','ema21','ema50','macd_hist','rsi','vwap','atr','bb_width']
+    if any(pd.isna(row[k]) for k in required): return state
+    # ── Step 6: Evaluate both directions ─────────────────────────
+    for direction in ['long', 'short']:
+        sc = score_signal(row, direction)
+        if sc < HALF_SCORE: continue
+        mult  = 1.0 if sc >= MIN_SCORE else 0.5
+        slip  = SLIPPAGE_PCT if direction=='long' else -SLIPPAGE_PCT
+        entry = row['close'] * (1 + slip)
+        stop  = calculate_stop(entry, row['atr'], direction)
+        t1, t2 = calculate_targets(entry, stop, direction)
+        qty   = calculate_qty(state['capital'], entry, stop, mult)
+        if qty <= 0: continue
+        comm  = entry * qty * COMMISSION_PCT * 2
+        order = Order(symbol='SYM', direction=direction, qty=qty,
+                      entry_price=entry, stop_price=stop,
+                      target1=t1, target2=t2, entry_ts=ts, score=sc)
+        state['positions'].append(order)
+        state['daily_trades'] += 1
+        log_trade(order, sc)
+        break  # one trade per bar
+    return state
+Section 9 — Backtest Engine
+9.1  backtest/engine.py
+Bar-by-bar simulation. Every trade must record all metadata. No vectorised shortcuts — bar-by-bar is mandatory to avoid look-ahead bias.
+def run_backtest(
+    df: pd.DataFrame,
+    initial_capital: float = CAPITAL,
+) -> dict:
+    """Returns {trades: list[dict], equity_curve: list[float]}."""
+    warmup = MACD_SLOW + BB_PERIOD + 10   # bars before starting
+    trades = []; daily = {}; capital = initial_capital
+    for i in range(warmup, len(df) - 5):
+        ts  = df.index[i]
+        hm  = ts.hour*60 + ts.minute
+        in_s1 = 9*60+30 <= hm <= 11*60+30
+        in_s2 = 13*60   <= hm <= 14*60
+        if not (in_s1 or in_s2): continue
+        date = ts.date()
+        daily.setdefault(date, 0)
+        if daily[date] >= MAX_DAILY_TRADES: continue
+        row = df.iloc[i]
+        needed = ['ema9','ema21','ema50','macd_hist','rsi','vwap','atr','bb_width']
+        if any(pd.isna(row[k]) for k in needed): continue
+        for direction in ['long', 'short']:
+            sc = score_signal(row, direction)
+            if sc < HALF_SCORE: continue
+            mult  = 1.0 if sc >= MIN_SCORE else 0.5
+            entry = row['close'] * (1 + (SLIPPAGE_PCT if direction=='long' else -SLIPPAGE_PCT))
+            stop  = calculate_stop(entry, row['atr'], direction)
+            t1, t2 = calculate_targets(entry, stop, direction)
+            qty   = calculate_qty(capital, entry, stop, mult)
+            if qty <= 0: continue
+            comm  = entry * qty * COMMISSION_PCT * 2
+            pnl, reason, exit_ts = simulate_trade(
+                df, i+1, direction, entry, stop, t1, t2, qty, comm
+            )
+            pnl = max(pnl, -capital * MAX_TRADE_LOSS)
+            trades.append({
+                'entry_ts': ts, 'exit_ts': exit_ts,
+                'direction': direction, 'entry': entry,
+                'stop': stop, 'qty': qty, 'score': sc,
+                'pnl': pnl, 'reason': reason,
+            })
+            capital += pnl; daily[date] += 1; break
+    return {'trades': trades, 'equity_curve': equity_curve(trades, initial_capital)}
+9.2  backtest/metrics.py — Required Metrics
+The metrics function must compute and report all of the following. Reject the strategy if any red metric falls outside acceptable range.
+Section 10 — Common Errors & How to Prevent Them
+These are the most frequent bugs in indicator-based algorithmic systems. Copilot must check for all of these during code review.
+Section 11 — Copilot Prompt Templates (Per Module)
+Paste the relevant prompt at the top of each new file before writing any code. This primes Copilot with the exact context it needs for that module.
+Universal header — paste at top of EVERY file:
+"""
+You are building the Weapon Candle Quant System for NSE India intraday trading.
+Market: NSE equities and index futures. Timezone: Asia/Kolkata (IST = UTC+5:30).
+Primary chart: 5-minute OHLCV resampled from 1-min DD/MM/YYYY HH:MM CSV.
+All parameters imported from config.py. Zero hardcoded values in this file.
+Zero look-ahead bias. Zero timezone-naive datetimes. Type hints on all functions.
+Indicators use Wilder's EMA smoothing (ewm alpha=1/period, adjust=False).
+VWAP resets every session via groupby('session_date'). Entry at next bar's open.
+"""
+For indicators/rsi.py:
+# Build RSI using Wilder's smoothing ONLY — ewm(alpha=1/RSI_PERIOD, adjust=False)
+# Never use rolling(14).mean() — this gives incorrect values.
+# Add columns: rsi (float), rsi_rising (int 0/1)
+# rsi_rising = 1 when rsi > rsi.shift(2) (2-bar comparison, not 1)
+For indicators/vwap.py:
+# VWAP must reset at session start using groupby('session_date').
+# typical_price = (high + low + close) / 3
+# vwap = cumsum(tp * volume) / cumsum(volume) — per session only
+# Add bands: vwap_upper = vwap + 1*expanding_std(tp), vwap_lower = vwap - 1*std
+# Verify: df.groupby('session_date')['vwap'].first() should equal df.groupby('session_date')['tp'].first()
+For signals/scorer.py:
+# 4-layer confluence gate. Short-circuit on first hard failure (return -1).
+# Layer 1: EMA full stack (mandatory). Layer 2: MACD histogram (mandatory).
+# Layer 3: RSI zone (mandatory). Layer 4: VWAP position (mandatory).
+# BB squeeze = universal block regardless of other scores.
+# Max score = 10. MIN_SCORE = 6 for full size. HALF_SCORE = 4 for 50% size.
+For debugging — if win rate < 45%:
+# Diagnose with: df[df['score'] >= 6].sample(10)[
+#     ['close','ema9','ema21','ema50','macd_hist','rsi','vwap','bb_width','rvol']
+# ]
+# Check: are any mandatory layer conditions being met on non-trending days?
+# Check: is VWAP resetting correctly? (vwap at 09:15 should == typical_price)
+# Check: is entry_price using next bar open? (not signal bar close)
+Build order:  config  →  utils  →  data  →  indicators  →  signals  →  execution  →  backtest  →  main
+Validate each module with unit tests before wiring into the next layer
+Market | Timeframe | Capital | Data format
+NSE / BSE India | 5-min (resampled from 1-min) | INR 5,00,000 | DD/MM/YYYY HH:MM
+Parameter | Value | Purpose
+EMA_FAST | 9 | Micro-trend line — fastest signal
+EMA_MID | 21 | Session trend — medium signal
+EMA_SLOW | 50 | Macro intraday trend — slowest filter
+Parameter | Value | Purpose
+MACD_FAST | 12 | Fast EMA period for MACD line
+MACD_SLOW | 26 | Slow EMA period for MACD line
+MACD_SIGNAL | 9 | Signal line EMA period
+Parameter | Value | Purpose
+RSI_PERIOD | 14 | Wilder smoothing period
+RSI_LONG_LO | 45 | Minimum RSI for long entries (momentum present)
+RSI_LONG_HI | 72 | Maximum RSI for long entries (not extended)
+RSI_SHORT_LO | 28 | Minimum RSI for short entries (not bouncing)
+RSI_SHORT_HI | 55 | Maximum RSI for short entries (momentum bearing)
+Parameter | Value | Purpose
+BB_PERIOD | 20 | Rolling window for BB calculation
+BB_STD | 2.0 | Standard deviation multiplier for bands
+BB_SQUEEZE_RATIO | 0.008 | band_width/price < 0.8% = squeeze = no trade
+Parameter | Value | Purpose
+ATR_PERIOD | 14 | Wilder ATR period
+ATR_SL_MULT | 1.4 | Stop = 1.4 × ATR from entry
+Parameter | Value | Purpose
+ENTRY_START | time(9,30) | Earliest entry — after first 15 min noise
+ENTRY_END1 | time(11,30) | End of morning session window
+ENTRY_START2 | time(13,0) | Start of afternoon session window
+ENTRY_END2 | time(14,0) | Last entry time — no new trades after this
+HARD_EXIT | time(15,15) | Force-close ALL positions — no exceptions
+BLACKOUT | time(11,30) – time(13,0) | Lunch chop — no new entries
+Parameter | Value | Purpose
+CAPITAL | 500000 | Total allocated capital in INR
+RISK_PCT | 0.005 | 0.5% of capital at risk per trade
+RR1 | 1.8 | Target 1 = 1.8 × SL distance
+RR2 | 3.0 | Target 2 = 3.0 × SL distance
+T1_CLOSE_PCT | 0.50 | Close 50% of position at Target 1
+COMMISSION_PCT | 0.0003 | 0.03% per side (Zerodha approx)
+SLIPPAGE_PCT | 0.0002 | 0.02% execution slippage
+MAX_DAILY_TRADES | 4 | Max trades per session across all instruments
+MIN_SCORE | 6 | Minimum confluence score for full-size entry
+HALF_SCORE | 4 | Score 4–5: enter at 50% position size
+MAX_TRADE_LOSS | 0.02 | Cap single trade loss at 2% of capital
+Step | File | Depends on | Responsibility
+1 | config.py | nothing | All constants and parameters
+2 | utils/time_filter.py | config | Session gate + hard exit check
+3 | data/loader.py | config, pytz | CSV load + 1-min to 5-min resample
+4 | data/preprocessor.py | loader | session_date, prev_close, validation
+5 | indicators/ema.py | config | EMA 9/21/50 + cross detection
+6 | indicators/macd.py | config | MACD line, signal, histogram
+7 | indicators/rsi.py | config | Wilder RSI with zone classification
+8 | indicators/vwap.py | config | Session-reset VWAP + std bands
+9 | indicators/atr.py | config | Wilder ATR + volatility regime
+10 | indicators/bollinger.py | config | BB(20,2) + squeeze flag
+11 | indicators/volume.py | config | RVOL relative volume
+12 | signals/scorer.py | all indicators | 4-layer confluence scoring 0–10
+13 | signals/filters.py | time_filter, config | Session gate + daily cap + squeeze
+14 | execution/risk.py | config | Position size, SL, T1, T2
+15 | execution/order.py | config | Order dataclass + lifecycle
+16 | execution/manager.py | order, risk, ema | Trail, breakeven, T1 close
+17 | backtest/engine.py | all above | Bar-by-bar vectorised simulation
+18 | backtest/metrics.py | engine | Full performance report
+19 | main.py | all above | Live orchestrator on_bar_close()
+Condition | Long / Short rule | Points
+EMA full bull stack | ema9 > ema21 > ema50 (ALL three in sequence) | +2 pts  [MANDATORY — return -1 if fail]
+MACD histogram positive | macd_hist > 0 | +2 pts  [MANDATORY — return -1 if fail]
+MACD fresh cross bonus | macd_cross_bull == 1 on this bar | +1 pt   [bonus]
+MACD above zero bonus | macd_line > 0 (macro bull regime) | +1 pt   [bonus]
+RSI in long zone | 45 <= rsi <= 72 | +2 pts  [MANDATORY — return -1 if fail]
+RSI rising bonus | rsi > rsi.shift(2) | +1 pt   [bonus]
+Price above VWAP | close > vwap | +2 pts  [MANDATORY — return -1 if fail]
+Above VWAP upper band | close > vwap_upper (strong institutional bid) | +1 pt   [bonus]
+BB squeeze blocker | bb_squeeze == 1 | return -1 [universal block]
+High RVOL bonus | rvol >= 1.5 | +1 pt   [bonus]
+Trending market bonus | atr > atr_avg (ATR above 20-day average) | +1 pt   [bonus]
+Condition | Long / Short rule | Points
+EMA full bear stack | ema9 < ema21 < ema50 | +2 pts  [MANDATORY]
+MACD histogram negative | macd_hist < 0 | +2 pts  [MANDATORY]
+MACD bear cross bonus | macd_cross_bear == 1 | +1 pt   [bonus]
+MACD below zero bonus | macd_line < 0 | +1 pt   [bonus]
+RSI in short zone | 28 <= rsi <= 55 | +2 pts  [MANDATORY]
+RSI falling bonus | rsi < rsi.shift(2) | +1 pt   [bonus]
+Price below VWAP | close < vwap | +2 pts  [MANDATORY]
+Below VWAP lower band | close < vwap_lower | +1 pt   [bonus]
+BB squeeze blocker | bb_squeeze == 1 | return -1 [universal]
+High RVOL bonus | rvol >= 1.5 | +1 pt   [bonus]
+Trending market bonus | atr > atr_avg | +1 pt   [bonus]
+Score | Grade | Position size | Action
+8–10 | A — Elite | 100% (full size) | All 4 layers confirmed + bonus points. Highest conviction.
+6–7 | B — Strong | 100% (full size) | All mandatory layers pass. Good confluence. Standard entry.
+4–5 | C — Marginal | 50% (half size) | Mandatory layers pass but few bonus points. Reduce size.
+< 4 | Skip | 0% — no trade | Insufficient confluence. Skip entirely. Wait for next bar.
+Metric | Target | Minimum OK | Formula
+Win Rate | > 55% | > 45% | wins / total_trades * 100
+Profit Factor | > 1.7 | > 1.4 | gross_profit / gross_loss
+Sharpe (annual) | > 1.3 | > 0.9 | mean_ret / std_ret * sqrt(252*75)
+Sortino Ratio | > 1.5 | > 1.0 | mean_ret / downside_std * sqrt(252*75)
+Max Drawdown | < 10% | < 18% | peak_to_trough / peak * 100
+Avg RR | > 1.6 | > 1.3 | avg_win / avg_loss
+CAGR | > 20% | > 10% | (final/initial)^(365/days) - 1
+Calmar Ratio | > 1.2 | > 0.7 | CAGR / max_drawdown
+Error | Prevention rule
+Wrong RSI formula | MUST use ewm(alpha=1/14, adjust=False). Never rolling(14).mean(). Simple average gives different values and produces different signals.
+VWAP not resetting | VWAP cumsum MUST use groupby('session_date'). A single cumsum() across all days gives a meaningless multi-day VWAP. Check: first bar of each day should have vwap == typical_price.
+Look-ahead in MACD | MACD at bar[i] must only use data up to bar[i]. Never shift() with a negative number on indicators. Verify by checking that the backtest PnL does not change when running on a subset vs full dataset.
+Wrong resample direction | resample('5min', closed='left', label='left') is mandatory. Without this, the 09:15 bar may contain data from outside the session or overlap incorrectly with the next bar.
+DD/MM vs MM/DD parsing | Always use pd.to_datetime(df['date'], format='%d/%m/%Y %H:%M'). Never use infer_datetime_format=True — it will swap day and month on some dates silently.
+Entering at signal close | Entry price = next bar's open * (1 + slippage). Never entry = signal_bar['close']. By the time the signal fires, you cannot fill at that price.
+ATR needs prev_close | True Range formula requires the previous bar's close. Ensure preprocessor.py runs before atr.py and adds the prev_close column. Without it, the first bar's ATR is NaN and all dependent SL calculations fail.
+BB squeeze false signal | bb_squeeze == 1 must be a hard block — return -1 immediately. A squeeze followed by expansion creates the worst false signals. No bonus points can override this.
+NaN propagation | Check all required columns for NaN before calling score_signal(). A NaN in ema9 will cause the EMA stack condition to evaluate incorrectly (NaN > float returns False, not an error).
+Hard exit not firing | Hard exit at 15:15 must be a scheduled job independent of the bar-close loop. If the 15:10 bar is missing from the data feed, the 15:15 check inside on_bar_close() never runs.

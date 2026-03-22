@@ -17,6 +17,8 @@ except ImportError:
 
 from core.backtester import IntradayBacktester
 from core.data_handler import DataHandler
+from core.env_utils import load_env_file
+from strategies.weapon_candle_system_strategy import WeaponCandleSystemStrategy
 from trading_system.experiments import BacktestResultStore
 from trading_system.optimization import LLMAssistedRLOptimizer
 from trading_system.shared.strategies import (
@@ -28,6 +30,7 @@ from trading_system.shared.strategies import (
 
 # Force pandas to use Python string storage to avoid PyArrow LargeUtf8 type errors in Streamlit.
 pd.options.mode.string_storage = "python"
+load_env_file(Path(__file__).parent / ".env")
 
 st.set_page_config(page_title="Aram Backtest Engine", page_icon="📈", layout="wide")
 
@@ -115,6 +118,9 @@ def _build_strategy(strategy_choice: str, df: pd.DataFrame, override_params: dic
             }
             | override_params,
         )
+
+    if strategy_choice == "Weapon Candle (11-section system)":
+        return WeaponCandleSystemStrategy(df, params=override_params)
 
     return VWAPCrossStrategy(df, params={"rsi_period": 14} | override_params)
 
@@ -208,6 +214,7 @@ def main():
                 "Intraday Momentum (Proven Indian Mkt)",
                 "Ichimoku + RSI + VWAP + ATR",
                 "E-ORB (Opening Range Breakout)",
+                "Weapon Candle (11-section system)",
                 "VWAP Cross (Sample)",
             ],
             index=0,
@@ -339,9 +346,12 @@ def main():
 
             optimizer = LLMAssistedRLOptimizer(
                 parameter_space=parameter_space,
+                llm_provider=os.getenv("LLM_PROVIDER", "gemini") if use_llm_assist else "gemini",
                 llm_endpoint=os.getenv("LLM_OPT_ENDPOINT") if use_llm_assist else None,
-                llm_api_key=os.getenv("LLM_API_KEY") if use_llm_assist else None,
-                llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini") if use_llm_assist else None,
+                llm_api_key=(os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY"))
+                if use_llm_assist
+                else None,
+                llm_model=os.getenv("LLM_MODEL", "gemini-3.1-pro") if use_llm_assist else None,
             )
 
             def evaluate(params: dict):

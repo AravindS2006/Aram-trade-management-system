@@ -9,9 +9,12 @@ sys.path.append(str(Path(__file__).parent))
 
 from core.backtester import IntradayBacktester
 from core.data_handler import DataHandler
+from core.env_utils import load_env_file
 from trading_system.experiments import BacktestResultStore
 from trading_system.optimization import LLMAssistedRLOptimizer
 from trading_system.shared.strategies import IntradayMomentumStrategy
+
+load_env_file(Path(__file__).parent / ".env")
 
 
 def _metric_to_float(value: object) -> float:
@@ -180,9 +183,12 @@ def run_backtest_pipeline(
 
         optimizer = LLMAssistedRLOptimizer(
             parameter_space=parameter_space,
+            llm_provider=os.getenv("LLM_PROVIDER", "gemini") if use_llm_assist else "gemini",
             llm_endpoint=os.getenv("LLM_OPT_ENDPOINT") if use_llm_assist else None,
-            llm_api_key=os.getenv("LLM_API_KEY") if use_llm_assist else None,
-            llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini") if use_llm_assist else None,
+            llm_api_key=(os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY"))
+            if use_llm_assist
+            else None,
+            llm_model=os.getenv("LLM_MODEL", "gemini-3.1-pro") if use_llm_assist else None,
         )
 
         def evaluate(params: dict):

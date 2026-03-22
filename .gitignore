@@ -1,88 +1,43 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env files
-.env*.local
+﻿# Environment
 .env
-.env.*
-!.env.example
+.env.local
+*.env
 
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-
-core/__pycache__
-strategies/__pycache__
-__pycache__
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.eggs/
 .venv/
+venv/
+env/
 
-# python
-*.pyc
-*.pyo
-*.pyd
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (large files)
+data/cache/
+data/processed/
+data/results/
+!data/raw/csv/.gitkeep
+
+# Logs
+logs/*.log
+
+# Test artifacts
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
 .coverage
 htmlcov/
-
-# local runtime artifacts
-logs/
-data/output/
-data/*.parquet
-runs/
-reports/
-artifacts/
-tmp/
-temp/
-*.log
-*.sqlite3
-*.db
-
-# local secrets and credentials
-secrets/
-*.secret
-*.key
-*.crt
-*.p12
-*.jks
-*_credentials.json
-*credentials*.json
-
-# editor/local workspace
-.vscode/*
-!.vscode/extensions.json
-
-# OS junk
-Thumbs.db
-Desktop.ini
-
-# jupyter
-.ipynb_checkpoints/
+.mypy_cache/
+.ruff_cache/

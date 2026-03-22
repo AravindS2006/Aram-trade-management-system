@@ -1,7 +1,0 @@
-# Global owners
-* @aram
-
-# Core execution and accounting require explicit review
-/core/ @aram
-/config/ @aram
-/.github/ @aram

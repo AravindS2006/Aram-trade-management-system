@@ -1,77 +1,82 @@
-# Aram Trade Management System
+﻿# Aram Trade Management System (Aram-TMS)
 
-Professional algorithmic trading research stack for strategy development, intraday backtesting, portfolio analytics, and Streamlit-based review.
-
-## System Scope
-
-- Strategy building under `strategies`
-- Event-style intraday simulation in `core/backtester.py`
-- Portfolio PnL and tearsheet metrics in `core/portfolio.py`
-- Data ingestion and caching in `core/data_handler.py`
-- Interactive analysis UI in `app.py`
-
-## Ichimoku Strategy Package
-
-- Canonical location: `strategies/ichimoku_strategy`
-- Adapter used by the backtester: `strategies/ichimoku_strategy/strategy.py`
-- Canonical signal layers:
-	- `strategies/ichimoku_strategy/signals/layer1.py`
-	- `strategies/ichimoku_strategy/signals/layer2.py`
-	- `strategies/ichimoku_strategy/signals/layer3.py`
-- Compatibility wrappers (`layer1_trend.py`, `layer2_entry.py`, `layer3_confirm.py`) are kept only to preserve existing import paths.
-
-### Strategy Compliance Rules
-
-- Strict no look-ahead: decisions use only information available at bar close.
-- Signal outputs remain `-1/0/1` for integration with `core/backtester.py`.
-- Session filtering and hard exit logic are handled in IST-aware utilities.
-- Risk sizing and target generation are centralized in `execution/risk.py`.
-- Data preprocessing enforces required OHLCV schema and intraday feature consistency.
+**Professional Institutional-Grade Algorithmic Trading System for Indian Markets**
 
 ## Quick Start
 
-1. Install uv and Python 3.12.
-2. Install dependencies:
-	- `uv sync --group dev`
-3. Run test and quality checks:
-	- `uv run ruff check .`
-	- `uv run mypy core strategies app.py main.py`
-	- `uv run pytest`
-4. Launch Streamlit:
-	- `uv run streamlit run app.py`
+```bash
+pip install -r requirements.txt
+cp .env.example .env          # Add DhanHQ credentials
+python scripts/run_backtest.py --strategy MomentumStrategy
+streamlit run src/dashboard/app.py
+```
 
-## Backtest With Kaggle Minute CSV
+## Features
+- **Backtesting**: VectorBT (fast) + Backtrader (event-driven) + Walk-Forward Optimization
+- **Data**: yFinance (<2yr) + Kaggle CSV (long-term) with Parquet caching
+- **Forward Testing**: DhanHQ Sandbox paper trading
+- **Live Trading**: DhanHQ Live API (Phase 2)
+- **Dashboard**: Streamlit 8-page professional UI
+- **Strategies**: Momentum, Mean Reversion, Breakout (extensible)
+- **Risk**: 11 pre-trade checks, circuit breakers, Kelly/fixed-fractional sizing
+- **Costs**: Accurate Indian market costs (STT, exchange charges, GST, stamp duty)
 
-Use your local file (for example `data/RELIANCE_minute.csv`) with timeframe resampling.
+## Directory Structure
+```
+Aram-trade-management-system/
+├── .claude/          # Claude agentic instructions + skill files
+├── src/
+│   ├── strategies/   # BaseStrategy + library (Momentum, MeanRev, Breakout)
+│   ├── backtesting/  # VectorBT, Backtrader, Walk-Forward runners
+│   ├── forward_testing/ # DhanHQ Sandbox client + runner
+│   ├── data/         # yFinance + Kaggle CSV loaders
+│   ├── risk/         # Risk manager + position sizing
+│   └── dashboard/    # Streamlit app
+├── config/           # settings.yaml
+├── data/raw/csv/     # Place Kaggle CSV files here
+├── scripts/          # CLI runners
+└── tests/            # Unit + integration tests
+```
 
-- Streamlit:
-	- Select `Data Source = Local CSV (Kaggle/History)`
-	- Set `CSV Path` to your file
-	- Choose timeframe (`1m`, `5m`, `15m`, `30m`, `1h`, `1d`, etc.)
-	- Tune risk and execution fields (SL, TP, TSL, slippage, commission, quantity)
+## Strategies
 
-- CLI:
-	- Open `main.py`
-	- Set `DATA_SOURCE = "csv"`
-	- Set `CSV_PATH = "data/RELIANCE_minute.csv"`
-	- Adjust `INTERVAL`, `DAYS_BACK`, and execution/risk constants
-	- Run `uv run python main.py`
+| Strategy | Category | Universe |
+|---|---|---|
+| MomentumStrategy | 12-1 Momentum + Volume | NIFTY 100 |
+| MeanReversionStrategy | Bollinger Bands + RSI | NIFTY 50 |
+| BreakoutStrategy | Donchian Channel + Volume | NIFTY 100 |
 
-## Engineering Guardrails
+## Creating a Strategy
+```python
+from src.strategies.base_strategy import BaseStrategy, register_strategy
 
-- Signal contract must remain `-1/0/1`.
-- Backtester output contract must remain `(tearsheet, metrics)`.
-- PnL reconciliation must hold: final equity equals initial capital plus cumulative net PnL.
-- No look-ahead bias in strategy or execution timing logic.
+@register_strategy
+class MyStrategy(BaseStrategy):
+    NAME = "MyStrategy"
+    CATEGORY = "momentum"
 
-## Tooling Baseline
+    def __init__(self, lookback=20, **kwargs):
+        super().__init__(**kwargs)
+        self.lookback = lookback
 
-- Ruff lint + format
-- Mypy static typing
-- Pytest smoke and contract tests
-- Pre-commit hooks
-- GitHub Actions CI
-- VS Code tasks and extension recommendations
+    def get_parameters(self): return {"lookback": self.lookback}
+    def validate_parameters(self): assert 5<=self.lookback<=200; return True
 
-For full setup details, see `SETUP_GUIDE.md` and `README.md`.
+    def generate_signals(self, data):
+        sma = data["Close"].rolling(self.lookback).mean()
+        signals = (data["Close"] > sma).astype(int)
+        return signals.shift(1).fillna(0).astype(int)  # ALWAYS shift!
+```
 
+## CLI Reference
+```bash
+python scripts/run_backtest.py --strategy MomentumStrategy --start 2018-01-01
+python scripts/run_backtest.py --mode walk_forward --train-window 252 --test-window 63
+python scripts/run_backtest.py --list-strategies
+python scripts/run_forward_test.py --strategy MomentumStrategy --symbols RELIANCE TCS
+streamlit run src/dashboard/app.py
+```
+
+## Disclaimer
+For educational/personal use only. Algorithmic trading involves significant financial risk.
+Past backtest performance does not guarantee future results.

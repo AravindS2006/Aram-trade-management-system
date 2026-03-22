@@ -431,8 +431,8 @@ def main():
 
     if HAS_VECTORBT and len(returns) >= min_return_points:
         try:
-            import warnings
             import inspect
+            import warnings
 
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", message=".*benchmark_rets.*")

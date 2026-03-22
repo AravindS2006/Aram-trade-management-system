@@ -8,6 +8,7 @@ import streamlit as st
 
 try:
     import vectorbt as vbt  # noqa: F401
+
     HAS_VECTORBT = True
 except Exception:
     HAS_VECTORBT = False
@@ -35,9 +36,7 @@ def _format_for_display(df: pd.DataFrame) -> pd.DataFrame:
 
     float_cols = display_df.select_dtypes(include=["float", "float64", "float32"]).columns
     for col in float_cols:
-        display_df[col] = display_df[col].map(
-            lambda x: f"{x:.2f}" if pd.notnull(x) else ""
-        )
+        display_df[col] = display_df[col].map(lambda x: f"{x:.2f}" if pd.notnull(x) else "")
 
     return display_df.astype(str).astype(object)
 
@@ -195,7 +194,11 @@ def main():
 
     st.success(f"Loaded {len(df)} candles for {ticker}")
 
-    signal_count = int((data_with_signals["signal"] != 0).sum()) if "signal" in data_with_signals.columns else 0
+    signal_count = (
+        int((data_with_signals["signal"] != 0).sum())
+        if "signal" in data_with_signals.columns
+        else 0
+    )
     overview_cols = st.columns(4)
     overview_cols[0].metric("Signals Generated", f"{signal_count}")
     overview_cols[1].metric("Total Trades", str(metrics.get("Total Trades", 0)))
@@ -216,7 +219,9 @@ def main():
 
     returns = equity_series.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
 
-    core_metrics_df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"]).set_index("Metric")
+    core_metrics_df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"]).set_index(
+        "Metric"
+    )
 
     vbt_metrics_df = pd.DataFrame()
     if HAS_VECTORBT and len(returns) > 0:
@@ -232,7 +237,9 @@ def main():
                     vbt_dict[str(k)] = f"{v.days} days"
                 else:
                     vbt_dict[str(k)] = str(v)
-            vbt_metrics_df = pd.DataFrame(list(vbt_dict.items()), columns=["Metric", "Value"]).set_index("Metric")
+            vbt_metrics_df = pd.DataFrame(
+                list(vbt_dict.items()), columns=["Metric", "Value"]
+            ).set_index("Metric")
         except Exception as exc:
             st.warning(f"VectorBT stats could not be computed: {exc}")
 
@@ -247,7 +254,9 @@ def main():
 
             st.subheader("Advanced Metrics")
             if not vbt_metrics_df.empty:
-                st.dataframe(_format_for_display(vbt_metrics_df), use_container_width=True, height=300)
+                st.dataframe(
+                    _format_for_display(vbt_metrics_df), use_container_width=True, height=300
+                )
             else:
                 if HAS_VECTORBT:
                     st.info("Not enough return points for advanced stats.")
@@ -266,6 +275,7 @@ def main():
     with tab_data:
         st.subheader("Processed Data With Signals")
         st.dataframe(_format_for_display(data_with_signals), use_container_width=True, height=520)
+
 
 if __name__ == "__main__":
     main()

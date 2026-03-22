@@ -288,9 +288,6 @@ def main():
             st.error("No data available for the selected inputs.")
             return
 
-        strategy = _build_strategy(strategy_choice, df)
-        data_with_signals = strategy.get_data_with_signals()
-
         run_store = None
         run_id = None
         if persist_runs or optimize_with_rl:
@@ -308,8 +305,12 @@ def main():
             )
 
         def run_once(exec_params: dict):
+            # Create a fresh strategy instance with the UPDATED parameters
+            current_strategy = _build_strategy(strategy_choice, df, override_params=exec_params)
+            current_data_with_signals = current_strategy.get_data_with_signals()
+
             backtester = IntradayBacktester(
-                data_with_signals,
+                current_data_with_signals,
                 initial_capital=initial_capital,
                 risk_per_trade_pct=float(exec_params["risk_per_trade_pct"]),
                 sl_pct=float(exec_params["sl_pct"]),
@@ -319,7 +320,8 @@ def main():
                 quantity=int(exec_params["quantity"]),
                 commission=float(exec_params["commission"]),
             )
-            return backtester.run()
+            df_trades, metrics = backtester.run()
+            return df_trades, metrics, current_data_with_signals
 
         execution_params = {
             "risk_per_trade_pct": risk_pct,
@@ -355,7 +357,7 @@ def main():
             )
 
             def evaluate(params: dict):
-                trial_tearsheet, trial_metrics = run_once(params)
+                trial_tearsheet, trial_metrics, trial_data = run_once(params)
                 score = _score_metrics(trial_metrics)
                 details = {"metrics": trial_metrics}
                 if run_store is not None and run_id is not None:
@@ -374,7 +376,7 @@ def main():
             execution_params.update(opt_result.best_params)
             st.info(f"RL optimization selected best score: {opt_result.best_score:.4f}")
 
-        tearsheet, metrics = run_once(execution_params)
+        tearsheet, metrics, data_with_signals = run_once(execution_params)
 
         if run_store is not None and run_id is not None:
             run_store.save_backtest(
@@ -424,15 +426,58 @@ def main():
     )
 
     vbt_metrics_df = pd.DataFrame()
-    if HAS_VECTORBT and len(returns) > 0:
+    advanced_metrics_error: str | None = None
+    min_return_points = 2
+
+    if HAS_VECTORBT and len(returns) >= min_return_points:
         try:
-            stats = returns.vbt.returns(freq="D").stats()  # pyright: ignore[reportAttributeAccessIssue]
+            import warnings
+            import inspect
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=".*benchmark_rets.*")
+
+                # Determine frequency based on data length
+                # If we have < 10 days of data, daily stats (freq='D') will fail.
+                # Use sub-daily if needed, but 'D' is standard for Annualized metrics.
+                data_span_days = (
+                    (returns.index[-1] - returns.index[0]).days
+                    if isinstance(returns.index, pd.DatetimeIndex)
+                    else 365
+                )
+
+                # Create a simple benchmark: Buy & Hold of the underlying asset
+                benchmark_rets = None
+                if df is not None and not df.empty:
+                    # Align benchmark with returns using a case-insensitive close column lookup.
+                    close_col = next((c for c in df.columns if str(c).lower() == "close"), None)
+                    if close_col is not None:
+                        benchmark_rets = df[close_col].pct_change().reindex(returns.index).fillna(0)
+
+                # Compute stats
+                # If data is short, vbt.stats might still fail on 'Annualized' metrics.
+                vbt_ret_obj = returns.vbt.returns(freq="D")
+                stats_kwargs: dict[str, pd.Series] = {}
+                if benchmark_rets is not None:
+                    try:
+                        stats_params = set(inspect.signature(vbt_ret_obj.stats).parameters)
+                    except (TypeError, ValueError):
+                        stats_params = set()
+
+                    if "benchmark_rets" in stats_params:
+                        stats_kwargs["benchmark_rets"] = benchmark_rets
+                    elif "benchmark_returns" in stats_params:
+                        stats_kwargs["benchmark_returns"] = benchmark_rets
+
+                stats = vbt_ret_obj.stats(**stats_kwargs)  # pyright: ignore[reportAttributeAccessIssue]
+
             vbt_dict = {}
             for k, v in stats.items():
                 if pd.isna(v):
                     vbt_dict[str(k)] = "NaN"
                 elif isinstance(v, (float, np.floating)):
-                    vbt_dict[str(k)] = f"{v:.3f}"
+                    # Format as percentage if key contains %
+                    vbt_dict[str(k)] = f"{v:.2%}" if "%" in str(k) else f"{v:.3f}"
                 elif isinstance(v, pd.Timedelta):
                     vbt_dict[str(k)] = f"{v.days} days"
                 else:
@@ -441,7 +486,7 @@ def main():
                 list(vbt_dict.items()), columns=["Metric", "Value"]
             ).set_index("Metric")
         except Exception as exc:
-            st.warning(f"VectorBT stats could not be computed: {exc}")
+            advanced_metrics_error = str(exc)
 
     tab_dashboard, tab_log, tab_data = st.tabs(["Dashboard", "Trade Log", "Raw Data"])
 
@@ -459,7 +504,15 @@ def main():
                 )
             else:
                 if HAS_VECTORBT:
-                    st.info("Not enough return points for advanced stats.")
+                    if advanced_metrics_error:
+                        st.warning(
+                            f"Advanced metrics (VectorBT) could not be computed: {advanced_metrics_error}"
+                        )
+                    else:
+                        st.info(
+                            f"Not enough return points for advanced stats "
+                            f"(need at least {min_return_points}, got {len(returns)})."
+                        )
                 else:
                     st.info("Install vectorbt to view advanced metrics.")
 

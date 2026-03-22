@@ -22,12 +22,29 @@ try:
     print(f"Generated {num_signals} signals")
 
     if num_signals > 0:
-        bt = IntradayBacktester(data_with_signals, initial_capital=500000)
+        bt = IntradayBacktester(
+            data_with_signals, 
+            initial_capital=500000,
+            slippage=0.0,
+            tsl_pct=0.0,
+            commission=0.0
+        )
         df_trades, metrics = bt.run()
         if metrics:
-            print(metrics)
+            print("\n--- DETAILED METRICS ---")
+            for k, v in metrics.items():
+                print(f"METRIC|{k}|{v}")
+            
+            # Additional analysis
+            if not df_trades.empty:
+                print(f"TRADES_COUNT|{len(df_trades)}")
+                winning_trades = df_trades[df_trades['Net PnL'] > 0]
+                win_rate = (len(winning_trades) / len(df_trades)) * 100
+                print(f"WIN_RATE_PCT|{win_rate:.2f}")
+                print(f"AVG_PROFIT|{df_trades['Net PnL'].mean():.2f}")
+                print(f"MAX_CONSEC_LOSS|{(df_trades['Net PnL'] < 0).astype(int).groupby((df_trades['Net PnL'] >= 0).cumsum()).sum().max()}")
         else:
-            print("No trades generated in metrics.")
+            print("No trades generated.")
 except Exception as e:
     import traceback
     traceback.print_exc()

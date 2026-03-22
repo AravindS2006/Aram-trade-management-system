@@ -44,43 +44,50 @@ class Portfolio:
                 "quantity": qty,
                 "tag": tag,
             }
-        elif new_qty == 0:
+        elif (current_qty > 0 and qty < 0) or (current_qty < 0 and qty > 0):
+            # Reduction of position (partial or full)
             if symbol in self.active_trades:
-                entry = self.active_trades.pop(symbol)
-
-                if entry["quantity"] > 0:
+                entry = self.active_trades[symbol]
+                
+                # Determine how much is being closed
+                closed_qty = min(abs(qty), abs(current_qty))
+                if current_qty < 0:
+                    closed_qty = -closed_qty  # maintain sign relative to current_qty
+                
+                # Use absolute for cost math
+                abs_closed_qty = abs(closed_qty)
+                
+                if current_qty > 0:
                     buy_price = entry["entry_price"]
                     sell_price = price
                 else:
                     buy_price = price
                     sell_price = entry["entry_price"]
 
-                abs_qty = abs(entry["quantity"])
-
-                cost_data = calculate_intraday_costs(buy_price, sell_price, abs_qty)
-
-                if entry["quantity"] > 0:
-                    gross_pnl = (sell_price - buy_price) * abs_qty
-                else:
-                    gross_pnl = (entry["entry_price"] - price) * abs_qty
-
+                cost_data = calculate_intraday_costs(buy_price, sell_price, abs_closed_qty)
+                gross_pnl = (sell_price - buy_price) * abs_closed_qty
+                
                 net_pnl = round(gross_pnl - cost_data["total_charges"], 3)
                 self.cash += net_pnl
 
-                self.closed_trades.append(
-                    {
-                        "Symbol": symbol,
-                        "Entry Time": entry["entry_time"],
-                        "Exit Time": timestamp,
-                        "Entry Price": round(entry["entry_price"], 2),
-                        "Exit Price": round(price, 2),
-                        "Quantity": entry["quantity"],
-                        "Gross PnL": round(gross_pnl, 2),
-                        "Taxes & Charges": round(cost_data["total_charges"], 2),
-                        "Net PnL": round(net_pnl, 2),
-                        "Tag": tag,
-                    }
-                )
+                self.closed_trades.append({
+                    "Symbol": symbol,
+                    "Entry Time": entry["entry_time"],
+                    "Exit Time": timestamp,
+                    "Entry Price": round(entry["entry_price"], 2),
+                    "Exit Price": round(price, 2),
+                    "Quantity": closed_qty,
+                    "Gross PnL": round(gross_pnl, 2),
+                    "Taxes & Charges": round(cost_data["total_charges"], 2),
+                    "Net PnL": round(net_pnl, 2),
+                    "Tag": tag,
+                })
+
+                if new_qty == 0:
+                    self.active_trades.pop(symbol)
+                else:
+                    # Update active trade quantity for remaining portion
+                    self.active_trades[symbol]["quantity"] = new_qty
 
         self.positions[symbol] = new_qty
         current_val = self.initial_capital + sum([t["Net PnL"] for t in self.closed_trades])

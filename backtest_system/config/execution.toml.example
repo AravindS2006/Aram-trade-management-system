@@ -1,0 +1,15 @@
+[broker]
+provider = "paper"
+api_key = "YOUR_API_KEY"
+api_secret = "YOUR_API_SECRET"
+
+[order]
+default_product_type = "MIS"
+default_validity = "DAY"
+retry_count = 2
+
+[safety]
+live_trading_enabled = false
+confirm_before_live_orders = true
+max_order_notional = 100000.0
+max_daily_orders = 20

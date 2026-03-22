@@ -1,0 +1,7 @@
+# Global owners
+* @aram
+
+# Core execution and accounting require explicit review
+/backtest_system/core/ @aram
+/backtest_system/config/ @aram
+/.github/ @aram

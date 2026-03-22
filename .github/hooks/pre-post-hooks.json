@@ -1,0 +1,5 @@
+{
+  "version": "1.0",
+  "hooks": {},
+  "notes": "Hook definitions were disabled because the previous schema was invalid for the current environment. Reintroduce using the officially supported object-based hook schema."
+}

@@ -1,0 +1,23 @@
+{
+	"python.defaultInterpreterPath": "${workspaceFolder}/backtest_system/.venv/Scripts/python.exe",
+	"python.analysis.extraPaths": [
+		"${workspaceFolder}/backtest_system"
+	],
+	"python.testing.pytestEnabled": true,
+	"python.testing.pytestArgs": [
+		"tests"
+	],
+	"python.testing.cwd": "${workspaceFolder}/backtest_system",
+	"python.analysis.typeCheckingMode": "basic",
+	"editor.formatOnSave": true,
+	"editor.codeActionsOnSave": {
+		"source.organizeImports": "explicit",
+		"source.fixAll": "explicit"
+	},
+	"files.exclude": {
+		"**/__pycache__": true,
+		"**/.pytest_cache": true,
+		"**/.mypy_cache": true,
+		"**/.ruff_cache": true
+	}
+}

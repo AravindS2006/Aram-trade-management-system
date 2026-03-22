@@ -34,3 +34,29 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+backtest_system/core/__pycache__
+backtest_system/strategies/__pycache__
+backtest_system/.venv
+backtest_system/__pycache__
+
+# python
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# local runtime artifacts
+logs/
+backtest_system/logs/
+backtest_system/data/output/
+backtest_system/data/*.parquet
+data/*.parquet
+
+# jupyter
+.ipynb_checkpoints/

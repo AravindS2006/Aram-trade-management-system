@@ -1,0 +1,27 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backtest_system/.*\.py$
+      - id: ruff-format
+        files: ^backtest_system/.*\.py$
+
+  - repo: local
+    hooks:
+      - id: pytest-smoke
+        name: pytest smoke suite
+        entry: uv run --directory backtest_system pytest
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

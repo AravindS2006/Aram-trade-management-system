@@ -1,6 +1,6 @@
 ---
 name: backtesting
-description: "Use when: building, debugging, validating, or tuning strategies and backtests in backtest_system. Keywords: strategy signals, IntradayBacktester, Portfolio PnL, tearsheet metrics, look-ahead bias."
+description: "Use when: building, debugging, validating, or tuning strategies and backtests in repository root. Keywords: strategy signals, IntradayBacktester, Portfolio PnL, tearsheet metrics, look-ahead bias."
 ---
 
 # Backtesting Skill
@@ -9,7 +9,7 @@ Production workflow for strategy and backtest tasks in this repository.
 
 ## When to Use
 
-- Creating or editing strategy files in `backtest_system/strategies/`
+- Creating or editing strategy files in `strategies/`
 - Debugging `IntradayBacktester` execution behavior
 - Validating `Portfolio` PnL and tearsheet metrics
 - Diagnosing no-trade / overtrade / unstable-result scenarios
@@ -19,9 +19,9 @@ Production workflow for strategy and backtest tasks in this repository.
 
 ### 1. Confirm Runtime Contract
 
-- Strategy base: `BaseStrategy` (`backtest_system/core/strategy.py`)
-- Backtest runner: `IntradayBacktester` (`backtest_system/core/backtester.py`)
-- Portfolio accounting: `Portfolio` (`backtest_system/core/portfolio.py`)
+- Strategy base: `BaseStrategy` (`core/strategy.py`)
+- Backtest runner: `IntradayBacktester` (`core/backtester.py`)
+- Portfolio accounting: `Portfolio` (`core/portfolio.py`)
 - Required signal output: `self.signals['signal']` with values `-1/0/1`
 
 ### 2. Strategy Development
@@ -86,7 +86,7 @@ After making strategy/backtest changes:
 
 1. Run one short backtest using known symbol/date range.
 2. Verify no exceptions and non-empty expected outputs.
-3. Verify metric keys consumed by `backtest_system/app.py` still exist.
+3. Verify metric keys consumed by `app.py` still exist.
 4. Verify behavior is deterministic for repeated runs with same input.
 
 ## Output Style
@@ -94,3 +94,4 @@ After making strategy/backtest changes:
 - Provide root-cause-first analysis.
 - Include concrete file/function references.
 - Report what was validated, not just what was changed.
+

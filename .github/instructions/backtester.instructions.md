@@ -1,11 +1,11 @@
 ---
-applyTo: "backtest_system/core/backtester.py"
+applyTo: "core/backtester.py"
 description: "Use when: editing IntradayBacktester execution flow, signal timing, stop logic, slippage, or square-off behavior."
 ---
 
 # Backtester Implementation Instructions
 
-Use this guidance when changing `IntradayBacktester` in `backtest_system/core/backtester.py`.
+Use this guidance when changing `IntradayBacktester` in `core/backtester.py`.
 
 ## Canonical Behavior
 
@@ -37,7 +37,7 @@ Use this guidance when changing `IntradayBacktester` in `backtest_system/core/ba
 - Verify risk sizing cannot produce zero quantity.
 - Verify no branch leaves `position`/`current_qty` in an inconsistent state.
 - Verify returned tearsheet and metrics schema remain unchanged.
-- Verify edits preserve compatibility with `backtest_system/app.py` rendering path.
+- Verify edits preserve compatibility with `app.py` rendering path.
 
 ## Validation Steps
 
@@ -47,3 +47,4 @@ After modifying this file:
 2. Confirm trades are generated when signals exist.
 3. Confirm forced square-off closes open positions near session end.
 4. Confirm `Total Trades` and `Final Equity` are present in metrics.
+

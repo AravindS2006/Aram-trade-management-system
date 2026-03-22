@@ -9,7 +9,7 @@ Repository-focused workflow for robust market and backtest data analysis.
 
 ## When to Use
 
-- EDA on files under `backtest_system/data/` or external CSV inputs
+- EDA on files under `data/` or external CSV inputs
 - Trade/tearsheet quality checks before trusting metrics
 - Pattern analysis for volatility, trend, and session behavior
 - Comparing strategy runs across parameter sets
@@ -22,8 +22,8 @@ Repository-focused workflow for robust market and backtest data analysis.
 #### Load & Inspect Data
 ```python
 from core.data_handler import DataHandler
-handler = DataHandler(data_dir='backtest_system/data')
-data = handler.load_csv('backtest_system/data/RELIANCE_trades.csv')
+handler = DataHandler(data_dir='data')
+data = handler.load_csv('data/RELIANCE_trades.csv')
 
 # Baseline profile
 print(data.shape)
@@ -113,3 +113,4 @@ Always validate:
 - Show assumptions and caveats explicitly.
 - Separate observed facts from hypotheses.
 - Include numeric evidence for every major claim.
+

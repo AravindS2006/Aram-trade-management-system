@@ -1,6 +1,6 @@
 ---
 name: master-agent
-description: "Use when: you need end-to-end orchestration across strategy, backtester, portfolio, Streamlit UI, and performance/debug work in backtest_system. Keywords: full-system refactor, cross-module bug, architecture fix, root cause across layers."
+description: "Use when: you need end-to-end orchestration across strategy, backtester, portfolio, Streamlit UI, and performance/debug work in repository root. Keywords: full-system refactor, cross-module bug, architecture fix, root cause across layers."
 ---
 
 # Master Agent
@@ -10,7 +10,7 @@ The Master Agent is the orchestrator for complex, multi-layer changes in this re
 ## Guiding Principles
 
 1. Verify paths and contracts before editing.
-2. Keep cross-module changes coherent with `backtest_system` runtime contracts.
+2. Keep cross-module changes coherent with `repository root` runtime contracts.
 3. Prefer small safe edits with measurable validation.
 4. Orchestrate specialized agents when domain depth is required.
 

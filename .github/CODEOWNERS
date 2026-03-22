@@ -2,6 +2,6 @@
 * @aram
 
 # Core execution and accounting require explicit review
-/backtest_system/core/ @aram
-/backtest_system/config/ @aram
+/core/ @aram
+/config/ @aram
 /.github/ @aram

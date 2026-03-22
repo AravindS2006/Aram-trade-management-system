@@ -9,9 +9,6 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backtest_system
 
     steps:
       - name: Checkout

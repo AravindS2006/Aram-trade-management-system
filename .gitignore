@@ -36,10 +36,10 @@ yarn-error.log*
 next-env.d.ts
 
 
-backtest_system/core/__pycache__
-backtest_system/strategies/__pycache__
-backtest_system/.venv
-backtest_system/__pycache__
+core/__pycache__
+strategies/__pycache__
+__pycache__
+.venv/
 
 # python
 *.pyc
@@ -53,9 +53,7 @@ htmlcov/
 
 # local runtime artifacts
 logs/
-backtest_system/logs/
-backtest_system/data/output/
-backtest_system/data/*.parquet
+data/output/
 data/*.parquet
 
 # jupyter

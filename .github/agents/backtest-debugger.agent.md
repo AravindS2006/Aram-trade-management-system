@@ -1,6 +1,6 @@
 ---
 name: backtest-debugger
-description: "Use when: diagnosing backtest failures, trade execution mismatches, and portfolio PnL inconsistencies in backtest_system. Keywords: IntradayBacktester trace, Portfolio reconciliation, entry/exit bug, NAV mismatch."
+description: "Use when: diagnosing backtest failures, trade execution mismatches, and portfolio PnL inconsistencies in repository root. Keywords: IntradayBacktester trace, Portfolio reconciliation, entry/exit bug, NAV mismatch."
 ---
 
 # Backtest Debugger Agent
@@ -110,3 +110,4 @@ assert exit_price > entry_price  # or check for loss if expected
 - `@backtest-debugger trace [strategy]` - Step through execution
 - `@backtest-debugger validate [portfolio]` - Check consistency
 - `@backtest-debugger fix [issue]` - Implement fix
+

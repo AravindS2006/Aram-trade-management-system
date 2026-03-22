@@ -19,7 +19,7 @@ Custom agents for specialized workflows in the trade management system. Each age
 ### Strategy Developer
 - **Name**: `strategy-dev`
 - **Path**: `.github/agents/strategy-dev.agent.md`
-- **Use When**: Creating/debugging/tuning strategy files in `backtest_system/strategies`.
+- **Use When**: Creating/debugging/tuning strategy files in `strategies`.
 - **Capabilities**: Strategy implementation, signal validation, backtest-driven tuning.
 - **Tool Restrictions**: Full access to read, edit, search, and run terminal commands
 
@@ -49,3 +49,4 @@ Custom agents for specialized workflows in the trade management system. Each age
 Use `@AgentName` in chat or type `/agent-name` as a slash command.
 
 Example: `@strategy-dev help me debug my MACD strategy`
+

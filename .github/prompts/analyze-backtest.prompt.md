@@ -11,7 +11,7 @@ Deep dive into backtest results with comprehensive analysis and actionable insig
 ## Usage
 
 ```
-/analyze-backtest backtest_system/data/output/backtest_intraday_momentum_strategy.csv --report-type detailed --output-format html
+/analyze-backtest data/output/backtest_intraday_momentum_strategy.csv --report-type detailed --output-format html
 ```
 
 ## Analysis Includes
@@ -76,3 +76,4 @@ Deep dive into backtest results with comprehensive analysis and actionable insig
 | HTML report for client | `/analyze-backtest results.json --output-format html` |
 | Identify biggest losses | `/analyze-backtest results.json --report-type detailed` |
 | Compare two strategies | `/analyze-backtest strat1.csv vs strat2.csv` |
+

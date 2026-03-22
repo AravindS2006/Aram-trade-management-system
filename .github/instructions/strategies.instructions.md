@@ -1,15 +1,15 @@
 ---
-applyTo: "backtest_system/strategies/*.py"
+applyTo: "strategies/*.py"
 description: "Use when: implementing or modifying strategy files that inherit BaseStrategy and emit -1/0/1 signals."
 ---
 
 # Strategy Development Instructions
 
-Apply these rules to files in `backtest_system/strategies/`.
+Apply these rules to files in `strategies/`.
 
 ## Canonical Strategy Contract
 
-- Inherit from `BaseStrategy` from `backtest_system/core/strategy.py`.
+- Inherit from `BaseStrategy` from `core/strategy.py`.
 - Use `self.data` and `self.signals` initialized by `BaseStrategy`.
 - Implement exactly:
   - `generate_indicators(self)`
@@ -43,3 +43,4 @@ After editing strategy logic:
 - Introducing global mutable state.
 - Hardcoding symbol-specific values without parameterization.
 - Creating strategy APIs that diverge from `BaseStrategy` contract.
+

@@ -1,6 +1,6 @@
 ---
 name: strategy-dev
-description: "Use when: creating, debugging, validating, or tuning strategy files in backtest_system/strategies. Keywords: BaseStrategy, generate_signals, signal quality, strategy tuning, no-trade issue."
+description: "Use when: creating, debugging, validating, or tuning strategy files in strategies. Keywords: BaseStrategy, generate_signals, signal quality, strategy tuning, no-trade issue."
 ---
 
 # Strategy Developer Agent
@@ -70,3 +70,4 @@ Agent: → Inspects signal generation
 - `@strategy-dev test [strategy-name]` - Run backtest
 - `@strategy-dev debug [issue]` - Diagnose problems
 - `@strategy-dev optimize [strategy-name]` - Parameter tuning
+

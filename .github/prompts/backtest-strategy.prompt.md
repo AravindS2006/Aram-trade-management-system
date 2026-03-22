@@ -1,7 +1,7 @@
 ---
 name: backtest-strategy
-description: "Run a strategy through the backtesting pipeline in backtest_system and return tearsheet, key metrics, and execution diagnostics."
-argument-hint: "<strategy-file> [data-file: backtest_system/data/RELIANCE_trades.csv] [initial-capital: 100000]"
+description: "Run a strategy through the backtesting pipeline in repository root and return tearsheet, key metrics, and execution diagnostics."
+argument-hint: "<strategy-file> [data-file: data/RELIANCE_trades.csv] [initial-capital: 100000]"
 ---
 
 # Backtest Strategy Prompt
@@ -11,7 +11,7 @@ Run a complete backtest workflow on a strategy, capturing results and generating
 ## Usage
 
 ```
-/backtest-strategy intraday_momentum_strategy.py --data-file backtest_system/data/RELIANCE_trades.csv --initial-capital 50000
+/backtest-strategy intraday_momentum_strategy.py --data-file data/RELIANCE_trades.csv --initial-capital 50000
 ```
 
 ## Workflow
@@ -26,7 +26,7 @@ Run a complete backtest workflow on a strategy, capturing results and generating
    - Drawdown analysis
    - Trade distribution
    - Risk metrics
-6. **Create Artifacts**: Optionally save report to `backtest_system/data/output/backtest_[strategy].md`
+6. **Create Artifacts**: Optionally save report to `data/output/backtest_[strategy].md`
 
 ## Output Example
 
@@ -56,3 +56,4 @@ Run a complete backtest workflow on a strategy, capturing results and generating
 | Quick test with minimal data | `/backtest-strategy test_strat --data-file data/sample.csv` |
 | Production backtest | `/backtest-strategy prod_strat --starting-capital 1000000` |
 | Compare multiple strategies | `/backtest-strategy strat1 && backtest-strategy strat2` |
+

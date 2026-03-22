@@ -11,7 +11,7 @@ Perform comprehensive exploratory data analysis on trade datasets.
 ## Usage
 
 ```
-/explore-data backtest_system/data/RELIANCE_trades.csv --analysis-depth standard
+/explore-data data/RELIANCE_trades.csv --analysis-depth standard
 ```
 
 ## EDA Workflow
@@ -108,3 +108,4 @@ Day-of-week effect:
 | quick | 5 min | Data summary, quality check, basic stats |
 | standard | 15 min | + Pattern detection, correlations |
 | deep | 30+ min | + Regime analysis, seasonality, anomalies |
+

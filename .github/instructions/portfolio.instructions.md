@@ -1,11 +1,11 @@
 ---
-applyTo: "backtest_system/core/portfolio.py"
+applyTo: "core/portfolio.py"
 description: "Use when: changing Portfolio state transitions, PnL accounting, trade close logic, or tearsheet metric generation."
 ---
 
 # Portfolio Implementation Instructions
 
-Use this file when editing `Portfolio` in `backtest_system/core/portfolio.py`.
+Use this file when editing `Portfolio` in `core/portfolio.py`.
 
 ## Canonical Responsibilities
 
@@ -44,3 +44,4 @@ After changes to this file:
 2. Confirm a short trade close computes positive/negative net PnL correctly.
 3. Confirm empty closed trades returns `(None, {})` behavior unchanged.
 4. Confirm `Total Trades`, `Final Equity`, and `Total Return %` are still produced.
+

@@ -1,4 +1,4 @@
-﻿# Setup Guide
+# Setup Guide
 
 This guide standardizes local setup for professional strategy development, backtesting, and validation.
 
@@ -12,30 +12,30 @@ This guide standardizes local setup for professional strategy development, backt
 
 From repository root:
 
-uv sync --directory backtest_system --group dev
+uv sync --group dev
 
 ## 2) Configure Environment
 
 Optional, for local default parameters:
 
-1. Copy backtest_system/.env.example to backtest_system/.env
+1. Copy .env.example to .env
 2. Adjust symbol, risk, and safety toggles as needed
 
 ## 3) Quality Gate Commands
 
 Run all checks before committing:
 
-- uv run --directory backtest_system ruff check .
-- uv run --directory backtest_system ruff format --check .
-- uv run --directory backtest_system mypy core strategies app.py main.py
-- uv run --directory backtest_system pytest
+- uv run ruff check .
+- uv run ruff format --check .
+- uv run mypy core strategies app.py main.py
+- uv run pytest
 
 ## 4) Run the System
 
 - Streamlit UI:
-  - uv run --directory backtest_system streamlit run app.py
+  - uv run streamlit run app.py
 - CLI pipeline:
-  - uv run --directory backtest_system python main.py
+  - uv run python main.py
 
 ## 5) VS Code Productivity
 
@@ -63,3 +63,4 @@ Before trusting results:
 3. Reconcile final equity with cumulative net PnL.
 4. Confirm metric keys used by UI remain stable.
 5. Keep data quality checks in place (OHLC consistency, sorted timestamps).
+

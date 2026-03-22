@@ -4,18 +4,18 @@ These instructions apply to all coding tasks in this repository and define the c
 
 ## Source Of Truth Paths
 
-- Main package root: `backtest_system/`
-- Backtester engine: `backtest_system/core/backtester.py`
-- Portfolio engine: `backtest_system/core/portfolio.py`
-- Strategy base class: `backtest_system/core/strategy.py`
-- Data loading: `backtest_system/core/data_handler.py`
-- Indicators: `backtest_system/core/indicators.py`
-- Strategy implementations: `backtest_system/strategies/*.py`
-- Streamlit UI: `backtest_system/app.py`
+- Main package root: repository root
+- Backtester engine: `core/backtester.py`
+- Portfolio engine: `core/portfolio.py`
+- Strategy base class: `core/strategy.py`
+- Data loading: `core/data_handler.py`
+- Indicators: `core/indicators.py`
+- Strategy implementations: `strategies/*.py`
+- Streamlit UI: `app.py`
 
 ## Canonical Runtime Contracts
 
-- Strategy classes must inherit `BaseStrategy` from `backtest_system/core/strategy.py`.
+- Strategy classes must inherit `BaseStrategy` from `core/strategy.py`.
 - Strategy interface uses:
 	- `generate_indicators(self)`
 	- `generate_signals(self)`
@@ -58,4 +58,5 @@ These instructions apply to all coding tasks in this repository and define the c
 
 - Use `.github/instructions/*.instructions.md` for file-scoped guardrails.
 - Use `.github/skills/*/SKILL.md` for multi-step task workflows.
-- Keep guidance aligned to actual code paths under `backtest_system/`.
+- Keep guidance aligned to actual code paths under repository root.
+

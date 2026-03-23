@@ -1,4 +1,4 @@
-﻿"""
+"""
 Base Strategy - Aram Trade Management System
 All trading strategies must inherit from BaseStrategy.
 """

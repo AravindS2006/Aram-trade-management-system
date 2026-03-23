@@ -1,4 +1,4 @@
-﻿"""
+"""
 Built-in Strategies — Aram-TMS
 Momentum, Mean Reversion, and Breakout strategies for NSE equities.
 """

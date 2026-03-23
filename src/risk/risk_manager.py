@@ -1,4 +1,4 @@
-﻿"""
+"""
 Risk Manager - Aram-TMS
 Pre-trade validation, portfolio risk monitoring, and circuit breakers.
 """

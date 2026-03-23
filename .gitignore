@@ -17,11 +17,13 @@ venv/
 env/
 
 # IDE
-.vscode/settings.json
 .idea/
 *.swp
 .DS_Store
 Thumbs.db
+
+# VS Code local-only files
+.vscode/*.local.json
 
 # Jupyter
 .ipynb_checkpoints/

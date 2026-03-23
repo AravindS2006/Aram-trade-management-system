@@ -1,4 +1,4 @@
-﻿"""
+"""
 Walk-Forward Optimizer - Aram-TMS
 Prevents overfitting via rolling/anchored out-of-sample validation.
 """

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Forward Test Runner CLI - Aram-TMS
 Launches paper trading via DhanHQ Sandbox.
 

@@ -1,4 +1,4 @@
-﻿"""Aram Trade Management System"""
+"""Aram Trade Management System"""
 __version__ = "1.0.0"
 
 from src.strategies.base_strategy import (

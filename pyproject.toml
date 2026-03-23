@@ -1,13 +1,148 @@
-﻿[tool.black]
+[project]
+name = "aram-trade-management-system"
+version = "0.1.0"
+description = "Institutional-grade algorithmic trading system for Indian markets"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+	"backtrader==1.9.78.123",
+	"dhanhq>=2.0.0",
+	"yfinance>=0.2.40",
+	"pandas>=2.1.0",
+	"numpy>=1.26.0",
+	"pyarrow>=14.0",
+	"fastparquet>=2024.2.0",
+	"ta>=0.11.0",
+	"scipy>=1.11.0",
+	"scikit-learn>=1.4.0",
+	"xgboost>=2.0.0",
+	"lightgbm>=4.3.0",
+	"statsmodels>=0.14.0",
+	"PyPortfolioOpt>=1.5.5",
+	"streamlit>=1.35.0",
+	"plotly>=5.20.0",
+	"altair>=5.2.0",
+	"matplotlib>=3.8.0",
+	"aiohttp>=3.9.0",
+	"websockets>=12.0",
+	"httpx>=0.27.0",
+	"requests>=2.31.0",
+	"python-dotenv>=1.0.0",
+	"pydantic>=2.6.0",
+	"pydantic-settings>=2.2.0",
+	"PyYAML>=6.0.1",
+	"loguru>=0.7.2",
+	"rich>=13.7.0",
+	"tqdm>=4.66.0",
+	"sqlalchemy>=2.0.0",
+	"schedule>=1.2.1",
+	"apscheduler>=3.10.4",
+	"python-dateutil>=2.9.0",
+	"pytz>=2024.1",
+	"click>=8.1.7",
+	"tabulate>=0.9.0",
+	"openpyxl>=3.1.0",
+	"Jinja2>=3.1.0",
+]
+
+[project.optional-dependencies]
+vectorized = [
+	"vectorbt>=0.26.0",
+]
+ta-advanced = [
+	"pandas-ta>=0.3.14b0; python_version >= '3.12'",
+]
+
+[dependency-groups]
+dev = [
+	"pytest>=8.0.0",
+	"pytest-asyncio>=0.23.0",
+	"pytest-cov>=5.0.0",
+	"pytest-mock>=3.12.0",
+	"hypothesis>=6.100.0",
+	"black>=24.0.0",
+	"ruff>=0.3.0",
+	"mypy>=1.9.0",
+	"pre-commit>=3.7.0",
+	"bandit>=1.7.9",
+	"pip-audit>=2.7.3",
+	"vulture>=2.11",
+	"radon>=6.0.1",
+	"interrogate>=1.7.0",
+	"types-requests>=2.31.0.20240311",
+	"types-PyYAML>=6.0.12.20250516",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.black]
 line-length = 100
 target-version = ["py311"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-select = ["E","F","W","I"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
 ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
 
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_optional = true
+pretty = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+	"pragma: no cover",
+	"if TYPE_CHECKING:",
+	"raise NotImplementedError",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "notebooks", "data"]
+skips = ["B101"]
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = true
+ignore-magic = true
+ignore-module = true
+ignore-nested-functions = true
+ignore-nested-classes = true
+exclude = ["tests", "notebooks", "data", ".venv"]
+fail-under = 70
+
+[tool.vulture]
+min_confidence = 80
+paths = ["src", "scripts"]
+exclude = ["tests/*", "notebooks/*", ".venv/*"]

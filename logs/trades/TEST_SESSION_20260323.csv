@@ -1,0 +1,2 @@
+timestamp,session_id,mode,strategy,symbol,side,quantity,price,order_value,status,reason,order_id,timeframe,data_source,stop_loss,take_profit,portfolio_value,risk_reasons,metadata
+2026-03-23T19:48:14,TEST_SESSION,forward_test,MomentumStrategy,RELIANCE,BUY,10,2500,25000.0,PLACED,,,5m,yfinance,2450,2600,1000000,"[""ok""]","{""note"": ""smoke""}"

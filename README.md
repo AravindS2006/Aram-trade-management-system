@@ -11,6 +11,64 @@ python scripts/run_backtest.py --strategy MomentumStrategy
 streamlit run src/dashboard/app.py
 ```
 
+## UV Workflow (Offline-First)
+
+Project tooling is configured for `uv` with linting, formatting, type checks, and tests.
+No install step is required right now; run these later when network is stable:
+
+```bash
+# One-time dependency install (runtime + dev tools)
+uv sync --all-groups
+
+# Optional heavy extras
+uv sync --all-groups --extra vectorized
+uv sync --all-groups --extra ta-advanced
+
+# Quality checks
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run mypy src
+uv run pytest
+
+# One-command quality check on Windows PowerShell
+powershell -ExecutionPolicy Bypass -File scripts/dev_quality.ps1
+
+# Security and maintainability scripts (Windows PowerShell)
+powershell -ExecutionPolicy Bypass -File scripts/dev_security.ps1
+powershell -ExecutionPolicy Bypass -File scripts/dev_maintainability.ps1
+```
+
+Pre-commit is configured with local hooks (no hook repo downloads):
+
+```bash
+uv run pre-commit install
+uv run pre-commit run --all-files
+```
+
+Additional quality and security tools (configured in pyproject, install later with uv sync):
+
+```bash
+# Security
+uv run bandit -r src scripts
+uv run pip-audit
+
+# Dead code and maintainability
+uv run vulture src scripts
+uv run radon cc src -s -a
+
+# Docstring coverage
+uv run interrogate src
+```
+
+Model Context Protocol (MCP):
+- No project-local MCP server is required for this repository right now.
+- The current workflow uses editor-provided language tooling and does not depend on a custom MCP server process.
+
+VS Code tasks are preconfigured in .vscode/tasks.json:
+- Quality: Full
+- Security: Scan
+- Maintainability: Scan
+
 ## Features
 - **Backtesting**: VectorBT (fast) + Backtrader (event-driven) + Walk-Forward Optimization
 - **Data**: yFinance (<2yr) + Kaggle CSV (long-term) with Parquet caching

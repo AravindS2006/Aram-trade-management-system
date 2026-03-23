@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Quality: Full",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "scripts/dev_quality.ps1"
+            ],
+            "group": "test"
+        },
+        {
+            "label": "Security: Scan",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "scripts/dev_security.ps1"
+            ]
+        },
+        {
+            "label": "Maintainability: Scan",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "scripts/dev_maintainability.ps1"
+            ]
+        }
+    ]
+}
